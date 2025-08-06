@@ -1,0 +1,153 @@
+import numpy as np
+
+class State:
+    def __init__(self, vector):
+        self.vector = vector
+
+    def apply(self, gate):
+        return State(gate.matrix@self.vector)
+
+    def norm(self):
+        return np.linalg.norm(self.vector)
+    
+    def normalise(self):
+        return State(self.vector/self.norm())
+    
+    def __str__(self):
+        return str(self.vector)
+    
+    def parallel(self,other):
+        return State(np.kron(self.vector,other.vector))
+    
+    def full_measurement(state):
+        # Calculate probabilities for each basis state
+        probs = np.abs(state)**2
+
+        # Randomly select a basis state based on probabilities
+        outcome_index = np.random.choice(len(state), p=probs)
+
+        # Collapse the state to the selected basis state
+        collapsed_state = np.zeros_like(state)
+        collapsed_state[outcome_index] = 1
+
+        return outcome_index, collapsed_state
+    
+    def subsystem_measurement(self, qubit_index, num_qubits):
+        """
+        Perform measurement on a specific qubit in a multi-qubit system and remove the measured dimension.
+        """
+        # Reshape the state vector into a tensor product form
+        reshaped_state = self.vector.reshape([2] * num_qubits)
+
+        # Calculate probabilities for the specified qubit
+        probs = np.zeros(2)
+        for i in range(2):
+            mask = [slice(None)] * num_qubits
+            mask[qubit_index] = i
+            probs[i] = np.sum(np.abs(reshaped_state[tuple(mask)])**2)
+
+        # Randomly select a measurement outcome
+        outcome = np.random.choice([0, 1], p=probs)
+
+        # Collapse the state based on the measurement outcome
+        mask = [slice(None)] * num_qubits
+        mask[qubit_index] = outcome
+        collapsed_state = reshaped_state[tuple(mask)]
+
+        # Remove the measured dimension
+        final_state = State(collapsed_state.flatten())
+        new_state_vector = final_state.normalise()
+
+        return outcome, new_state_vector
+
+
+class Gate:
+    def __init__(self, matrix):
+        self.matrix = matrix
+
+    def compose(self, other):
+        return Gate(other.matrix@self.matrix)
+    
+    def parallel(self, other):
+        return Gate(np.kron(self.matrix, other.matrix))
+    
+zero_state = State(np.array([1, 0]))  # |0>
+one_state = State(np.array([0, 1]))  # |1>
+
+phi_plus = State(np.array([1, 0, 0, 1]) / np.sqrt(2))  # |00> + |11>
+phi_minus = State(np.array([1, 0, 0, -1]) / np.sqrt(2))  # |00> - |11>
+psi_plus = State(np.array([0, 1, 1, 0]) / np.sqrt(2))  # |01> + |10>
+psi_minus = State(np.array([0, 1, -1, 0]) / np.sqrt(2))  # |01> - |10>
+
+
+I = Gate(np.array([[1, 0], [0, 1]]))
+X = Gate(np.array([[0, 1], [1, 0]]))  # Pauli-X gate
+Z = Gate(np.array([[1, 0], [0, -1]]))
+H = Gate((1/np.sqrt(2)) * np.array([[1, 1], [1, -1]]))  # Hadamard gate
+T = Gate(np.array([[1, 0], [0, np.exp(1j * np.pi / 4)]]))  # T gate
+CNOT = Gate(np.array([[1, 0, 0, 0], 
+                 [0, 1, 0, 0], 
+                 [0, 0, 0, 1], 
+                 [0, 0, 1, 0]]))  # CNOT gate
+
+# Example 1: H@T@X gate
+
+initial_state = one_state
+full_gate = H.compose(T).compose(X)
+final_state = initial_state.apply(full_gate)
+
+print("HTX gate")
+print("Final state:", final_state)
+print("Final state norm:", final_state.norm())
+
+# Example 2: parallel H's and CNON
+
+initial_state = one_state.parallel(one_state)
+HH = H.parallel(H)
+full_gate = CNOT.compose(HH)
+final_state = initial_state.apply(full_gate)
+
+print()
+print("Final state:", final_state)
+print("Final state norm:", final_state.norm())
+
+# Example 3: Quantum teleportation
+
+alpha, beta = 0.3**0.5, 0.7**0.5
+
+chris_state = State(np.array([alpha,beta]))
+state = chris_state.parallel(phi_plus)
+
+state = state.apply(CNOT.parallel(I))
+state = state.apply(H.parallel(I).parallel(I))
+
+print(11)
+print("state",state)
+print("norm",state.norm())
+
+bell_measure_outcome = [None,None]
+outcome, state = state.subsystem_measurement(0, 3)
+
+bell_measure_outcome[0] = int(outcome)
+outcome, state = state.subsystem_measurement(0, 2)
+
+bell_measure_outcome[1] = int(outcome)
+
+print()
+print("state after bell measurment", state)
+print("norm:", state.norm())
+print("measurment_outcome", bell_measure_outcome)
+
+final_gate = I
+if bell_measure_outcome[0]: 
+    final_gate = final_gate.compose(Z)
+if bell_measure_outcome[1]: 
+    final_gate = final_gate.compose(X)
+
+final_state = state.apply(final_gate)
+print()
+print("final state", final_state)
+print("norm:", final_state.norm())
+
+
+
