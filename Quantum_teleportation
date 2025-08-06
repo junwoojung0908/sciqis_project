@@ -148,6 +148,3 @@ final_state = state.apply(final_gate)
 print()
 print("final state", final_state)
 print("norm:", final_state.norm())
-
-
-
